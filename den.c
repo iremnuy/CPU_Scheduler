@@ -81,7 +81,6 @@ int compareProcesses_same_priority(const void *a, const void *b) {
     {
         return -1;
     }
-    //if they are equal do not change the order
     else
     {
         return 0;
@@ -99,7 +98,7 @@ struct ReadyQueue_same_priority
 // Structure for the ready queue
 struct ReadyQueue //this structure must be changed to hold queues that store processes with same priority,queue may be a single elemnt or more than one
 {
-    struct Process processes[50]; //it must be changed to hold processes with same priority
+    struct Process processes[50];
     int front;
     int rear;
 };
@@ -155,7 +154,7 @@ int main()
     }
 
     // Read processes from definition.txt and store in the ready queue
-    FILE *definitionFile = fopen("Example_Inputs_Outputs/def7.txt", "r");
+    FILE *definitionFile = fopen("Example_Inputs_Outputs_v3/def8.txt", "r");
     struct ReadyQueue readyQueue;
     //also stor the processes in an array to sort them later
     struct Process process_array[50];
@@ -245,36 +244,43 @@ int main()
 
     //before context switch, check if there is a new process arrived add it to the ready queue and sort it
         //int a= readyQueue.front;
-        printf("initial fron tis %d\n",readyQueue.front);
-        printf("initial rear is %d\n",readyQueue.rear);
-        printf("inital front of same priority queue is %d\n",same_priority_queue.front);
         while (readyQueue.processes[readyQueue.front].arrivalTime <= global_time && readyQueue.front <= readyQueue.rear && readyQueue.front!=-1)
         {
 
             printf("hello new incomer %d , global time is : %d\n",readyQueue.processes[readyQueue.front].name, global_time);
             enqueue(&same_priority_queue, dequeue(&readyQueue));
             current_pr+=1;
+            //qsort(same_priority_queue.processes, same_priority_queue.rear-same_priority_queue.front+1, sizeof(struct Process), compareProcesses_same_priority);
             //after dequeue this process is moved and removed from ready queue
             //remove the incomers from ready queue and add them to same_priority_queue
 
             //a++;
         }
         //readyQueue.front=a; 
-        printf("this is front of ready queue %d\n",readyQueue.front);
-        printf("this is front of same priority queue %d\n",same_priority_queue.front);
         //readyQueue.front=a; //a son kez bir fazladan artıyor o yğzden
         
         if (preempted_queue.front!=-1){
             printf("preempted queue is not empty\n");
             //if there is a preempted process then enqueue it to the same_priority_queue
             enqueue(&same_priority_queue,dequeue(&preempted_queue));
+            //qsort(same_priority_queue.processes, same_priority_queue.rear-same_priority_queue.front+1, sizeof(struct Process), compareProcesses_same_priority);
+            
         }
-        qsort(same_priority_queue.processes, current_pr, sizeof(struct Process), compareProcesses_same_priority);
+        //before sorting print same priority queue
+        printf("before sorting same priority queue is :\n");
+        for (int i = same_priority_queue.front; i <= same_priority_queue.rear; i++)
+        {
+            printf("%s %d %d %s\n", same_priority_queue.processes[i].name, same_priority_queue.processes[i].priority, same_priority_queue.processes[i].arrivalTime, same_priority_queue.processes[i].classType);
+        }
+        qsort(same_priority_queue.processes+same_priority_queue.front, same_priority_queue.rear-same_priority_queue.front+1, sizeof(struct Process), compareProcesses_same_priority);
+        printf("sortingde kullanılan current pr %d\n",current_pr);
+        printf("rear and front of same priority queue is %d %d\n",same_priority_queue.rear,same_priority_queue.front);
+        //print same priority queue processes array 
+
 
         //print the contents of the same_priority_queue
         if (same_priority_queue.front!=-1){
-            printf("same priority queue is not empty\n");
-            printf("same priority queue is :\n");
+            printf("same priority queue iso :\n");
             for (int i = same_priority_queue.front; i <= same_priority_queue.rear; i++)
             {
                 printf("%s %d %d %s\n", same_priority_queue.processes[i].name, same_priority_queue.processes[i].priority, same_priority_queue.processes[i].arrivalTime, same_priority_queue.processes[i].classType);
@@ -327,6 +333,7 @@ int main()
             }
             lineNumber++;
         }
+        
 
         int preemption=0; 
         while (!preemption){ //for each processes each instruction, for platinum this loop run continually until the end of the process
@@ -415,7 +422,6 @@ int main()
                         if (currentProcess.priority < nextProcess.priority) { //dikkat burada p1 in yanına p2 gelirse sonraki cs yine p1 den başlar isimden dolayı 
                             //dışarıdan gelen aynı oriority ise preempt edemez time limit dolmalı etmesi için 
                             printf("arrival of a hşgher pri from outside \n");
-                            printf("current pri and next pri %d %d\n",currentProcess.priority,nextProcess.priority);
                             preemption=1; //yeni ekledim irem 7 ocak
                             //buraya eklemiyorum 
                             currentProcess.remaining_burst--; //time quantumu bitmemiş olsa da burst azaltıyorum 
@@ -440,28 +446,35 @@ int main()
                         //update the current line of the process
                     }
                 }
-                else{
+                if (isReadyQueueEmpty(&preempted_queue)){ //if it is empty we may check the last preemption possibility 
                     if (!isReadyQueueEmpty(&same_priority_queue) && time_limit<=0){ //eğer time quantum aşıldıysa aynı pri gelebilir
                         //if the next process in the same_priority_queue has the same priority then continue with the next instruction
                         //to achieve this increment the Ascıı value of the name of the process P1 to (P+1)1 so that it will be sorted after any potential P(x)
                         struct Process nextProcess = same_priority_queue.processes[same_priority_queue.front];
                         int i = same_priority_queue.front;
-                        if (nextProcess.priority == currentProcess.priority) { //ama bunu yapmak için ayrıca current processin time quantuma ulasmıs olması lazım 
-                            preemption=1;
-                            currentProcess.preempted=1;
-                            printf("same priority process %s is coming instead\n",nextProcess.name);
-                            currentProcess.remaining_burst--;
-                            //currentProcess.name[0]=currentProcess.name[0]+1;
-                            printf("new process name is %s\n",currentProcess.name);
-                            enqueue(&preempted_queue, currentProcess); //enqueue the process into the ready queue
-                            //ya da bu yöntem yerine priority değerini 0.1 arttır veya 0.05 arttır ? 
-                            ///increment the Ascıı value of the name of the process P1 to (P+1)1 so that it will be sorted after any potential P(x)
-                            //for example P1 to Q1 , P2 to Q2 , P3 to Q3
-                           printf("new process name is %s\n",currentProcess.name);
-                            //ensure it is the least highest between the same priority processes
-                            //printf("new process name is %s\n",currentProcess.name);
-
+                        printf("acaba beni bekleyen aynı priorityli var mı\n");
+                        printf("this is same pri queue before deciding to siwtch \n");
+                        for (int i = same_priority_queue.front; i <= same_priority_queue.rear; i++){
+                            printf("%s %d %d %s\n", same_priority_queue.processes[i].name, same_priority_queue.processes[i].priority, same_priority_queue.processes[i].arrivalTime, same_priority_queue.processes[i].classType);
                         }
+                        
+                            if (nextProcess.priority == currentProcess.priority) { //ama bunu yapmak için ayrıca current processin time quantuma ulasmıs olması lazım 
+                                //burayı bir kere kontrol etme loopta et def8 düzelir 
+                                preemption=1;
+                                currentProcess.preempted=1;
+                                printf("same priority process %s is coming instead\n",nextProcess.name);
+                                currentProcess.remaining_burst--;
+                                //currentProcess.name[0]=currentProcess.name[0]+1;
+                                printf("new process name is %s\n",currentProcess.name);
+                                enqueue(&preempted_queue, currentProcess); //enqueue the process into the ready queue
+                                //ya da bu yöntem yerine priority değerini 0.1 arttır veya 0.05 arttır ? 
+                                ///increment the Ascıı value of the name of the process P1 to (P+1)1 so that it will be sorted after any potential P(x)
+                                //for example P1 to Q1 , P2 to Q2 , P3 to Q3
+                            printf("new process name is %s\n",currentProcess.name);
+                                //ensure it is the least highest between the same priority processes
+                                //printf("new process name is %s\n",currentProcess.name);
+
+                            }
                     }
             //continue;
                 }
