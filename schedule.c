@@ -252,19 +252,6 @@ int main()
                         global_time += currentProcess.timequantum;
                         //update the timequantum of the process
                         printf("Preempting process %s at %d ms\n", currentProcess.name, global_time);
-                        if (currentProcess.remaining_burst == 0) {
-                            //change the class of the process
-                            if (strcmp(currentProcess.classType, "SILVER") == 0) {
-                                strcpy(currentProcess.classType, "GOLD");
-                                currentProcess.timequantum = 120;
-                                currentProcess.remaining_burst = 5;
-                            }
-                            else if (strcmp(currentProcess.classType, "GOLD") == 0) {
-                                strcpy(currentProcess.classType, "PLATINUM");
-                                currentProcess.timequantum = 120;
-                                currentProcess.remaining_burst = 8000;
-                            }
-                        }
 
                     }
                     else if(global_time+process_instruction_counts[i].exec_time>check_point && !is_platinum){ //do not preempt platinum
