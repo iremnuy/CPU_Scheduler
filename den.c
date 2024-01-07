@@ -29,8 +29,19 @@ struct Process {
     int currentLine;
     int timequantum;
     int remaining_burst;
+    int preempted; //if the process is preempted then it will be 1
     struct Instruction *pr_instruct; //array of instructions for each process to store remaining time for each instruction
 };
+//initiate the values 
+struct Process init_process(struct Process process){
+    process.executionTime=0;
+    process.preempted=0;
+    process.remaining_burst=0;
+    process.currentLine=1;
+    process.priority=0;
+    process.timequantum=0;
+    return process;
+}
 
 // Comparison function for sorting processes based on priority and arrival time
 int compareProcesses(const void *a, const void *b) {
@@ -61,10 +72,21 @@ int compareProcesses(const void *a, const void *b) {
 
 int compareProcesses_same_priority(const void *a, const void *b) {
     const struct Process *p1 = (const struct Process *)a;
-    const struct Process *p2 = (const struct Process *)b;
-        return strcmp(p1->name, p2->name); //sort according to name for round robin scheduling 
+    const struct Process *p2 = (const struct Process *)b; //arrival time is not important here
+    if (p1->priority < p2->priority)
+    {
+        return 1; //higher priority first
+    }
+    else if (p1->priority > p2->priority)
+    {
+        return -1;
+    }
+    //if they are equal do not change the order
+    else
+    {
+        return 0;
+    }
 
-    
 }
 
 
@@ -91,26 +113,26 @@ int isReadyQueueEmpty(struct ReadyQueue *queue)
 // Function to enqueue a process into the ready queue
 void enqueue(struct ReadyQueue *queue, struct Process process)
 {
-    if (queue->front == -1) 
+    if (queue->front == -1)  //if the queue is empty
     {
-        queue->front = 0;
+        queue->front = 0; //set the front to 0
     }
-    queue->rear++;
-    queue->processes[queue->rear] = process;
+    queue->rear++; 
+    queue->processes[queue->rear] = process; //add the process to the rear of the queue
 }
 
 // Function to dequeue a process from the ready queue
 struct Process dequeue(struct ReadyQueue *queue)
 {
     struct Process process = queue->processes[queue->front];
-    if (queue->front == queue->rear)
+    if (queue->front == queue->rear) //if there is only one element in the queue
     {
         queue->front = -1;
-        queue->rear = -1;
+        queue->rear = -1; //reset the queue
     }
     else
     {
-        queue->front++;
+        queue->front++; //move the front to the next element
     }
     return process;
 }
@@ -133,7 +155,7 @@ int main()
     }
 
     // Read processes from definition.txt and store in the ready queue
-    FILE *definitionFile = fopen("Example_Inputs_Outputs/def6.txt", "r");
+    FILE *definitionFile = fopen("Example_Inputs_Outputs/def7.txt", "r");
     struct ReadyQueue readyQueue;
     //also stor the processes in an array to sort them later
     struct Process process_array[50];
@@ -147,6 +169,9 @@ int main()
         // execution time is not assigned yet
         readyQueue.processes[i].currentLine = 1; // Start execution from the first line,1 yaptım öyle devam ettim sonra 
         readyQueue.processes[i].pr_instruct = all_instr; //assign the instruction array to the process later change during preemption
+        readyQueue.processes[i].preempted=0;
+        readyQueue.processes[i].executionTime = 0;
+        printf("this issss the priority %d\n",readyQueue.processes[i].priority);
         if (strcmp(readyQueue.processes[i].classType, "SILVER") == 0)
         {
             readyQueue.processes[i].timequantum = 80;
@@ -198,23 +223,37 @@ int main()
     struct ReadyQueue same_priority_queue;
     same_priority_queue.front=-1;
     same_priority_queue.rear=-1;
-
+    int current_pr=0;
+    struct ReadyQueue preempted_queue;
+    preempted_queue.front=-1;
+    preempted_queue.rear=-1;
     
     while (!isReadyQueueEmpty(&readyQueue) || !isReadyQueueEmpty(&same_priority_queue) ) //while there is a process in one of them 
     {  //CONTEXT SWİTCH OCCURED 
     printf("is ready queue empty %d\n",isReadyQueueEmpty(&readyQueue));
-    printf("is same priority queue empty %d\n",isReadyQueueEmpty(&same_priority_queue));
+    printf("is sameeee priority queue empty %d\n",isReadyQueueEmpty(&same_priority_queue));
+    //if same priority queue is empty but ready queue is not then add the first process to the same_priority_queue
+    if (isReadyQueueEmpty(&same_priority_queue) && !isReadyQueueEmpty(&readyQueue)){
+        printf("same priority queue is empty but ready queue is not\n");
+        enqueue(&same_priority_queue, dequeue(&readyQueue));
+        printf("same artık dolu");
+        current_pr+=1; //bunu azaltmayı unutma cıkıs yaoanlar icin 
+        struct Process switchedProcess=same_priority_queue.processes[same_priority_queue.front];
+        global_time=switchedProcess.arrivalTime;
+        printf("new process from future : %s\n",switchedProcess.name);
+    }
 
     //before context switch, check if there is a new process arrived add it to the ready queue and sort it
         //int a= readyQueue.front;
         printf("initial fron tis %d\n",readyQueue.front);
         printf("initial rear is %d\n",readyQueue.rear);
         printf("inital front of same priority queue is %d\n",same_priority_queue.front);
-        while (readyQueue.processes[readyQueue.front].arrivalTime <= global_time && readyQueue.front <= readyQueue.rear)
+        while (readyQueue.processes[readyQueue.front].arrivalTime <= global_time && readyQueue.front <= readyQueue.rear && readyQueue.front!=-1)
         {
 
             printf("hello new incomer %d , global time is : %d\n",readyQueue.processes[readyQueue.front].name, global_time);
             enqueue(&same_priority_queue, dequeue(&readyQueue));
+            current_pr+=1;
             //after dequeue this process is moved and removed from ready queue
             //remove the incomers from ready queue and add them to same_priority_queue
 
@@ -224,8 +263,26 @@ int main()
         printf("this is front of ready queue %d\n",readyQueue.front);
         printf("this is front of same priority queue %d\n",same_priority_queue.front);
         //readyQueue.front=a; //a son kez bir fazladan artıyor o yğzden
-        qsort(same_priority_queue.processes, num_of_proc, sizeof(struct Process), compareProcesses);
+        
+        if (preempted_queue.front!=-1){
+            printf("preempted queue is not empty\n");
+            //if there is a preempted process then enqueue it to the same_priority_queue
+            enqueue(&same_priority_queue,dequeue(&preempted_queue));
+        }
+        qsort(same_priority_queue.processes, current_pr, sizeof(struct Process), compareProcesses_same_priority);
 
+        //print the contents of the same_priority_queue
+        if (same_priority_queue.front!=-1){
+            printf("same priority queue is not empty\n");
+            printf("same priority queue is :\n");
+            for (int i = same_priority_queue.front; i <= same_priority_queue.rear; i++)
+            {
+                printf("%s %d %d %s\n", same_priority_queue.processes[i].name, same_priority_queue.processes[i].priority, same_priority_queue.processes[i].arrivalTime, same_priority_queue.processes[i].classType);
+            }
+        }
+        else{
+            printf("same priority queue is empty\n");
+        }
         global_time += 10;  //bunu bazen arttırmaya gerek olmayabilir 
         printf("CONTEXT SWITCH \n");
         // Dequeue the next process from the ready queue,this may be also another ready queue storing same priority processes in that case round robin scheduling will be applied to this whole queue 
@@ -234,7 +291,18 @@ int main()
         
         int is_platinum=0;
         //if there is more than one process with the same priority then store all of them in a queue and apply round robin scheduling to this queue
-        struct Process currentProcess = dequeue(&same_priority_queue);     //ensure that some processes are removed and same pri becomes empty 
+        struct Process currentProcess = dequeue(&same_priority_queue);    
+         //ensure that some processes are removed and same pri becomes empty 
+         //if the dequeued process is a preempted one enqueue it again to the same_priority_queue
+         //if (currentProcess.preempted==1){
+           //  enqueue(&same_priority_queue,currentProcess);
+             //currentProcess.preempted=0;
+             //currentProcess=dequeue(&same_priority_queue);
+         //}
+
+         //enqueue the preempted process again to the same_priority_queue
+
+         
         int time_limit=currentProcess.timequantum;
         //struct Instruction* all_instr = currentProcess.pr_instruct;
         printf("DEQUEUED PROCESS %s at %d ms\n", currentProcess.name, global_time);
@@ -242,21 +310,8 @@ int main()
         {
             is_platinum=1;
         }
-
         // Use processes list as a ready queue
-        if (!isReadyQueueEmpty(&readyQueue))
-        {
-            // Not the last process
-            struct Process nextProcess = readyQueue.processes[readyQueue.front];
-
-            check_point = nextProcess.arrivalTime; //decide at this point what to do (preempt or not)
-        }
-        else
-        {
-            // Last process
-            printf("Last process it must to without preemption \n");
-            check_point = global_time + 10000;
-        }
+        
         //open the file of current process named currentProcess.name.txt
         char filename[20];
         strcpy(filename, currentProcess.name);
@@ -293,6 +348,7 @@ int main()
                     currentProcess.currentLine++;
                     //update the execution time of the process
                     currentProcess.executionTime += all_instr[i].exec_time; 
+                    printf("for process %s execution time is %d\n",currentProcess.name,currentProcess.executionTime);
                     if (!is_platinum) {
                         time_limit-=all_instr[i].exec_time; 
                         //everytime time_limit of the process falls below zero, reduce the remaining burst by one 
@@ -310,7 +366,8 @@ int main()
                         total_turnaround+=turnaroundTime;
                         printf("Turnaround time for process %s is %d ms\n", currentProcess.name, turnaroundTime);
                         //calculate waiting time
-                        int waitingTime = turnaroundTime - currentProcess.executionTime+1;
+                        current_pr-=1; //bir tane process azaldı
+                        int waitingTime = turnaroundTime - (currentProcess.executionTime); //+1 i sildim 
                         total_wait+=waitingTime;
                         printf("GLOBAL and turnaround and execution %d %d %d \n",global_time,turnaroundTime,currentProcess.executionTime);
                         printf("Waiting time for process %s is %d ms\n", currentProcess.name, waitingTime);
@@ -350,19 +407,31 @@ int main()
                  // Not the last process
                     struct Process nextProcess = readyQueue.processes[readyQueue.front];
                     int i = readyQueue.front;
-                    while (nextProcess.arrivalTime <= global_time) {
+                    while (nextProcess.arrivalTime <= global_time && i<readyQueue.rear && readyQueue.rear!=-1) { //eğer eşitse aşağıda çıkarılacak
+                        printf("next process is  %s\n",nextProcess.name);
                         //higher pri gelmiş olabilir ama time_limit dolmamış olabilir bu durumda prempt edilirse tekrar schedule edildiğinde 
                         //time_limit yine time_quantumdan başlar şu an time_quantumu azaltmıyorum,örneğin 120 iken 100 de preempt edilirse bir sonrakine 20de değil 120 de burst u bir azalır 
                         //check if there is a higher priority process
-                        if (nextProcess.priority <= currentProcess.priority) { //dikkat burada p1 in yanına p2 gelirse sonraki cs yine p1 den başlar isimden dolayı 
-                            //preempt the process
+                        if (currentProcess.priority < nextProcess.priority) { //dikkat burada p1 in yanına p2 gelirse sonraki cs yine p1 den başlar isimden dolayı 
+                            //dışarıdan gelen aynı oriority ise preempt edemez time limit dolmalı etmesi için 
+                            printf("arrival of a hşgher pri from outside \n");
+                            printf("current pri and next pri %d %d\n",currentProcess.priority,nextProcess.priority);
                             preemption=1; //yeni ekledim irem 7 ocak
+                            //buraya eklemiyorum 
                             currentProcess.remaining_burst--; //time quantumu bitmemiş olsa da burst azaltıyorum 
-                            enqueue(&same_priority_queue, currentProcess); //enqueue the process into the ready queue
+                            enqueue(&preempted_queue, currentProcess); //enqueue the process into the ready queue
                         //store the line of the process
                         //update the current line of the process
                         //currentProcess.currentLine++; yine buradan devam edeceği için arttırma line ı
                         //NOT : bu durumda p1 den sonra aynı priority ile p2 gelirse tekrar p1 den devam eder ama context switch ekler araya 
+                            break;
+                        }
+                        if(currentProcess.priority==nextProcess.priority && time_limit<=0){
+                            printf("arrival of same pri from external preempt this is new comer : %s\n",nextProcess.name);
+                            preemption=1; //yeni ekledim irem 7 ocak
+                            currentProcess.remaining_burst--; //time quantumu bitmemiş olsa da burst azaltıyorum
+                            currentProcess.preempted=1;
+                            enqueue(&preempted_queue, currentProcess); //enqueue the process into the ready queue
                             break;
                         }
                         i++;
@@ -379,11 +448,16 @@ int main()
                         int i = same_priority_queue.front;
                         if (nextProcess.priority == currentProcess.priority) { //ama bunu yapmak için ayrıca current processin time quantuma ulasmıs olması lazım 
                             preemption=1;
-                            printf("same priority process %s is preempted\n",nextProcess.name);
+                            currentProcess.preempted=1;
+                            printf("same priority process %s is coming instead\n",nextProcess.name);
                             currentProcess.remaining_burst--;
-                            enqueue(&same_priority_queue, currentProcess); //enqueue the process into the ready queue
+                            //currentProcess.name[0]=currentProcess.name[0]+1;
+                            printf("new process name is %s\n",currentProcess.name);
+                            enqueue(&preempted_queue, currentProcess); //enqueue the process into the ready queue
                             //ya da bu yöntem yerine priority değerini 0.1 arttır veya 0.05 arttır ? 
-                            //currentProcess.name[1]++; //increment the Ascıı value of the name of the process P1 to (P+1)1 so that it will be sorted after any potential P(x)
+                            ///increment the Ascıı value of the name of the process P1 to (P+1)1 so that it will be sorted after any potential P(x)
+                            //for example P1 to Q1 , P2 to Q2 , P3 to Q3
+                           printf("new process name is %s\n",currentProcess.name);
                             //ensure it is the least highest between the same priority processes
                             //printf("new process name is %s\n",currentProcess.name);
 
@@ -403,7 +477,7 @@ int main()
                     currentProcess.remaining_burst = 5;
                 }
                 else if (strcmp(currentProcess.classType, "GOLD") == 0) {
-                    (printf("GOLD to PLATINUM\n"));
+                    printf("GOLD to PLATINUM\n");
                     strcpy(currentProcess.classType, "PLATINUM");
                     currentProcess.timequantum = 120;
                     currentProcess.remaining_burst = 8000;
@@ -422,9 +496,14 @@ int main()
 
         //process is either preempted or finished , 
     }
+    //print with 2 decimal points
 
-    printf("Average waiting time is %f ms\n", (float)total_wait /process_count);
-    printf("Average turnaround time is %f ms\n", (float)total_turnaround / process_count);
+    printf("Average waiting time is %.2f ms\n", (float)total_wait /process_count);
+    printf("this is total wait %d\n",total_wait);
+    printf("this is total turnaround %d\n",total_turnaround);
+    printf("this is process count %d\n",process_count);
+
+    printf("Average turnaround time is %.2f ms\n", (float)total_turnaround / process_count);
 
     return 0;
 }
