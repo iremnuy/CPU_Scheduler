@@ -4,12 +4,16 @@
 #include <string.h>
 
 int global_time = 0;
-
-
+int total_wait=0;
+int total_turnaround=0;
+int process_count=0;
 //TODO 
 //all processes must have their own all_instr so that they can store remaining time for the spesific instruction they are executing
 //close the process files after premption so that you can opean them again 
+//implement class convertion after a number of timequantum burst (for example 3 timequantum burst for silver to gold)
 // Define the instruction execution times
+//fazladan context switch time ekliyor olabilir , enqueue yaptıktan sonra qsort edip yeni bir tane alıyor aldığı aynı process ise eklemesin ???
+//eğer aynı priority olanlar arasında time quantum olsun istiyorsan p harfi önüne bir fazlasını ekle string comparisonda aşağıya gitsin o 
 struct Instruction {
     char name[10];
     int exec_time;
@@ -24,6 +28,7 @@ struct Process {
     int arrivalTime;
     int currentLine;
     int timequantum;
+    int remaining_burst;
     struct Instruction *pr_instruct; //array of instructions for each process to store remaining time for each instruction
 };
 
@@ -113,7 +118,7 @@ int main()
     }
 
     // Read processes from definition.txt and store in the ready queue
-    FILE *definitionFile = fopen("definition.txt", "r");
+    FILE *definitionFile = fopen("Example_Inputs_Outputs/def6.txt", "r");
     struct ReadyQueue readyQueue;
     readyQueue.front = -1;
     readyQueue.rear = -1;
@@ -127,14 +132,17 @@ int main()
         if (strcmp(readyQueue.processes[i].classType, "SILVER") == 0)
         {
             readyQueue.processes[i].timequantum = 80;
+            readyQueue.processes[i].remaining_burst = 3;
         }
         else if (strcmp(readyQueue.processes[i].classType, "GOLD") == 0)
         {
             readyQueue.processes[i].timequantum = 120;
+            readyQueue.processes[i].remaining_burst = 5;
         }
         else if (strcmp(readyQueue.processes[i].classType, "PLATINUM") == 0)
         {
             readyQueue.processes[i].timequantum = 120;
+            readyQueue.processes[i].remaining_burst = 8000;
         }
         else
         {
@@ -146,6 +154,7 @@ int main()
         enqueue(&readyQueue, readyQueue.processes[i]);
         i++;
         num_of_proc=i;
+        process_count=i;
     }
 
     fclose(definitionFile);
@@ -167,7 +176,8 @@ int main()
     while (!isReadyQueueEmpty(&readyQueue))
     {  //CONTEXT SWİTCH OCCURED 
 
-        global_time += 10; 
+        global_time += 10;  //bunu bazen arttırmaya gerek olmayabilir 
+        printf("CONTEXT SWITCH \n");
         // Dequeue the next process from the ready queue
         int is_platinum=0;
         struct Process currentProcess = dequeue(&readyQueue);
@@ -189,7 +199,7 @@ int main()
         else
         {
             // Last process
-            printf("Last process\n");
+            printf("Last process it must to without preemption \n");
             check_point = global_time + 10000;
         }
         //open the file of current process named currentProcess.name.txt
@@ -212,7 +222,6 @@ int main()
         
             int preemption=0; 
             while (!preemption){ //for each processes each instruction 
-
             char instructionName[10];
             fscanf(processFile, "%s", instructionName); //take the instruction at the line currentProcess.currentLine
             printf("Acurrent line is %d , current instr is %s \n",currentProcess.currentLine,instructionName);
@@ -225,6 +234,8 @@ int main()
                     if (process_instruction_counts[i].exec_time > currentProcess.timequantum && !is_platinum) {//we can preempt plaitnums if they exceed time quantum
                         //preempt the process
                         preemption=1;
+                        currentProcess.remaining_burst--; 
+                         //go on with the updated value 
                         //update the current line of the process
                         //currentProcess.currentLine++; yine buradan devam edeceği için arttırma line ı 
                         //update the execution time of the process
@@ -241,6 +252,19 @@ int main()
                         global_time += currentProcess.timequantum;
                         //update the timequantum of the process
                         printf("Preempting process %s at %d ms\n", currentProcess.name, global_time);
+                        if (currentProcess.remaining_burst == 0) {
+                            //change the class of the process
+                            if (strcmp(currentProcess.classType, "SILVER") == 0) {
+                                strcpy(currentProcess.classType, "GOLD");
+                                currentProcess.timequantum = 120;
+                                currentProcess.remaining_burst = 5;
+                            }
+                            else if (strcmp(currentProcess.classType, "GOLD") == 0) {
+                                strcpy(currentProcess.classType, "PLATINUM");
+                                currentProcess.timequantum = 120;
+                                currentProcess.remaining_burst = 8000;
+                            }
+                        }
 
                     }
                     else if(global_time+process_instruction_counts[i].exec_time>check_point && !is_platinum){ //do not preempt platinum
@@ -279,9 +303,12 @@ int main()
                         printf("Process %s is finished\n", currentProcess.name);
                         //calculate turnaround time
                         int turnaroundTime = global_time - currentProcess.arrivalTime;
+                        total_turnaround+=turnaroundTime;
                         printf("Turnaround time for process %s is %d ms\n", currentProcess.name, turnaroundTime);
                         //calculate waiting time
-                        int waitingTime = turnaroundTime - currentProcess.executionTime;
+                        int waitingTime = turnaroundTime - currentProcess.executionTime+1;
+                        total_wait+=waitingTime;
+                        printf("GLOBAL and turnaround and execution %d %d %d \n",global_time,turnaroundTime,currentProcess.executionTime);
                         printf("Waiting time for process %s is %d ms\n", currentProcess.name, waitingTime);
                         num_of_proc--; //bir tane process artık azaldı qsort için daha az sayı verilemli 
                         //delete from the ready queue
@@ -307,7 +334,7 @@ int main()
         if (strcmp(instructionName,"exit")==0){
             break;
         }
-        if (is_platinum){
+        else {
             continue;
         }
         
@@ -322,6 +349,9 @@ int main()
 
         // If a new process arrives during execution, add it to the array and re-sort
     }
+
+    printf("Average waiting time is %f ms\n", (float)total_wait /process_count);
+    printf("Average turnaround time is %f ms\n", (float)total_turnaround / process_count);
 
     return 0;
 }
